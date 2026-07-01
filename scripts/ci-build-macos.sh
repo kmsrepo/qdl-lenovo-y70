@@ -37,6 +37,13 @@ SDKROOT="$(find "$OSXCROSS_DIR" -type d -name '*.sdk' | sort -V | tail -n 1)"
 AR="$(find "$OSXCROSS_DIR/bin" -maxdepth 1 \( -type f -o -type l \) -name 'x86_64-apple-darwin*-ar' | sort -V | tail -n 1)"
 RANLIB="$(find "$OSXCROSS_DIR/bin" -maxdepth 1 \( -type f -o -type l \) -name 'x86_64-apple-darwin*-ranlib' | sort -V | tail -n 1)"
 STRIP="$(find "$OSXCROSS_DIR/bin" -maxdepth 1 \( -type f -o -type l \) -name 'x86_64-apple-darwin*-strip' | sort -V | tail -n 1)"
+MESON_AR="$(command -v llvm-ar || true)"
+MESON_RANLIB="$(command -v llvm-ranlib || true)"
+
+if [ -z "$MESON_AR" ] || [ -z "$MESON_RANLIB" ]; then
+	echo "llvm-ar and llvm-ranlib are required for the macOS Meson archive step" >&2
+	exit 1
+fi
 
 export PATH="$OSXCROSS_DIR/bin:$PATH"
 export LD_LIBRARY_PATH="$OSXCROSS_DIR/lib:/usr/lib/x86_64-linux-gnu:/usr/lib:${LD_LIBRARY_PATH:-}"
@@ -102,7 +109,8 @@ fi
 cat >"$CROSS_FILE" <<EOF
 [binaries]
 c = '$OSXCROSS_DIR/bin/o64-clang'
-ar = '$AR'
+ar = '$MESON_AR'
+ranlib = '$MESON_RANLIB'
 strip = '$STRIP'
 pkg-config = 'pkg-config'
 

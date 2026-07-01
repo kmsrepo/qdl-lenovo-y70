@@ -38,6 +38,9 @@ AR="$(find "$OSXCROSS_DIR/bin" -maxdepth 1 \( -type f -o -type l \) -name 'x86_6
 RANLIB="$(find "$OSXCROSS_DIR/bin" -maxdepth 1 \( -type f -o -type l \) -name 'x86_64-apple-darwin*-ranlib' | sort -V | tail -n 1)"
 STRIP="$(find "$OSXCROSS_DIR/bin" -maxdepth 1 \( -type f -o -type l \) -name 'x86_64-apple-darwin*-strip' | sort -V | tail -n 1)"
 
+export PATH="$OSXCROSS_DIR/bin:$PATH"
+export LD_LIBRARY_PATH="$OSXCROSS_DIR/lib:/usr/lib/x86_64-linux-gnu:/usr/lib:${LD_LIBRARY_PATH:-}"
+
 cat >"$CMAKE_TOOLCHAIN" <<EOF
 set(CMAKE_SYSTEM_NAME Darwin)
 set(CMAKE_SYSTEM_PROCESSOR x86_64)
@@ -92,8 +95,6 @@ endian = 'little'
 EOF
 
 export PKG_CONFIG_ALLOW_CROSS=1
-export PATH="$OSXCROSS_DIR/bin:$PATH"
-export LD_LIBRARY_PATH="$OSXCROSS_DIR/lib:${LD_LIBRARY_PATH:-}"
 
 meson setup "$BUILD_DIR" \
 	--cross-file "$CROSS_FILE" \

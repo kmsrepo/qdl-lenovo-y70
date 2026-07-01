@@ -13,6 +13,23 @@ CMAKE_TOOLCHAIN="$TRIPLET_DIR/osxcross-toolchain.cmake"
 VCPKG_TRIPLET="$TRIPLET_DIR/$TRIPLET.cmake"
 CROSS_FILE="$BUILD_DIR/x86_64-apple-darwin.ini"
 
+find_llvm_tool() {
+	local tool="$1"
+	local candidate
+
+	if command -v "$tool" >/dev/null 2>&1; then
+		command -v "$tool"
+		return
+	fi
+
+	for candidate in /usr/bin/"$tool"-* /usr/lib/llvm-*/bin/"$tool"; do
+		if [ -x "$candidate" ]; then
+			echo "$candidate"
+			return
+		fi
+	done
+}
+
 if [ ! -x "$OSXCROSS_DIR/bin/o64-clang" ]; then
 	rm -rf "$OSXCROSS_DIR" "$OSXCROSS_DIR.tmp"
 	docker pull "$IMAGE"
@@ -37,8 +54,8 @@ SDKROOT="$(find "$OSXCROSS_DIR" -type d -name '*.sdk' | sort -V | tail -n 1)"
 AR="$(find "$OSXCROSS_DIR/bin" -maxdepth 1 \( -type f -o -type l \) -name 'x86_64-apple-darwin*-ar' | sort -V | tail -n 1)"
 RANLIB="$(find "$OSXCROSS_DIR/bin" -maxdepth 1 \( -type f -o -type l \) -name 'x86_64-apple-darwin*-ranlib' | sort -V | tail -n 1)"
 STRIP="$(find "$OSXCROSS_DIR/bin" -maxdepth 1 \( -type f -o -type l \) -name 'x86_64-apple-darwin*-strip' | sort -V | tail -n 1)"
-MESON_AR="$(command -v llvm-ar || true)"
-MESON_RANLIB="$(command -v llvm-ranlib || true)"
+MESON_AR="$(find_llvm_tool llvm-ar)"
+MESON_RANLIB="$(find_llvm_tool llvm-ranlib)"
 
 if [ -z "$MESON_AR" ] || [ -z "$MESON_RANLIB" ]; then
 	echo "llvm-ar and llvm-ranlib are required for the macOS Meson archive step" >&2

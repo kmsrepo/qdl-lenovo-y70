@@ -5,16 +5,11 @@ on:
   push:
 
 jobs:
-  build-linux:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { arch: x64, os: 24, runner: ubuntu-24.04 }
-          - { arch: arm64, os: 24, runner: ubuntu-24.04-arm }
-          - { arch: x64, os: 22, runner: ubuntu-22.04 }
-          - { arch: arm64, os: 22, runner: ubuntu-22.04-arm }
-    runs-on: ${{ matrix.runner }}
+  build-single-linux-runner:
+    name: Build Linux, Windows and macOS
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -24,187 +19,55 @@ jobs:
       - name: Dependencies
         run: |
           sudo apt-get update
-
-          sudo apt-get install -y libcmocka-dev libxml2-dev libusb-1.0-0-dev libzip-dev help2man pipx zip
-          pipx ensurepath
-          pipx install meson==1.4.0
-
-      - name: Configure
-        run: meson setup build
-
-      - name: Build
-        run: meson compile -C build
-
-      - name: Run tests
-        run: meson test -C build --print-errorlogs
-
-      - name: Generate man pages
-        run: meson compile manpages -C build
-
-      - name: Package
-        run: |
-          set -euo pipefail
-          mkdir dist
-          cp ./build/qdl dist
-          # Bundle every shared-library dependency except the C runtime and
-          # the dynamic loader, so the binary runs without libxml2/libzip/etc.
-          # installed on the host.
-          ldd ./build/qdl | awk '/=> \//{print $3}' | while read -r lib; do
-            case "$lib" in
-              */libc.so.*|*/libm.so.*|*/libpthread.so.*|*/libdl.so.*|*/librt.so.*|*/ld-linux*|*/ld64.so.*) ;;
-              *) cp -vL "$lib" dist/ ;;
-            esac
-          done
-          chmod 0755 dist/qdl
-          chmod 0644 dist/*.so*
-          # RUNPATH is not inherited by transitively-loaded libraries, so point
-          # the binary and every bundled library at their own directory.
-          for f in dist/qdl dist/*.so*; do patchelf --set-rpath '$ORIGIN' "$f"; done
-          # Fail the build if anything is unresolved or resolves outside dist/.
-          if ldd dist/qdl | grep -q 'not found'; then
-            ldd dist/qdl; echo "::error::qdl has unresolved libraries"; exit 1
-          fi
-          leaked=$(ldd dist/qdl | awk '/=> \//{print $3}' \
-            | grep -vE '/lib(c|m|pthread|dl|rt)\.so' | grep -v "$PWD/dist/" || true)
-          if [ -n "$leaked" ]; then
-            echo "::error::qdl depends on unbundled libraries:"; echo "$leaked"; exit 1
-          fi
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: qdl-binary-ubuntu-${{matrix.os}}-${{ matrix.arch }}
-          path: dist/*
-
-
-  build-mac:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { sys: macos-14, arch: arm64 }
-          - { sys: macos-15-intel, arch: intel }
-    runs-on: ${{ matrix.sys }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Dependencies
-        run: |
-          brew install cmocka libxml2 libzip meson ninja help2man zip dylibbundler
-
-      - name: Configure
-        run: meson setup build
-
-      - name: Build
-        run: meson compile -C build
-
-      - name: Generate man pages
-        run: meson compile manpages -C build
-
-      - name: Run tests
-        run: meson test -C build --print-errorlogs
-
-      - name: Package
-        run: |
-          set -euxo pipefail
-          mkdir dist
-          # Recursively copy every non-system dylib next to the binary and
-          # rewrite the load commands to @executable_path. Apple-provided
-          # libraries under /usr/lib and /System are left as system references.
-          dylibbundler --overwrite-dir --bundle-deps \
-            --fix-file ./build/qdl --dest-dir dist --install-path @executable_path/
-          cp ./build/qdl dist
-          otool -L dist/qdl
-          dist/qdl || true
-          # Fail the build if the binary still references Homebrew locations.
-          if otool -L dist/qdl | awk 'NR>1{print $1}' | grep -E '/(opt/homebrew|usr/local)/'; then
-            echo "::error::qdl still references non-bundled Homebrew libraries"; exit 1
-          fi
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: qdl-binary-macos-${{ matrix.arch }}
-          path: dist/*
-
-  build-windows:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - { sys: windows-latest, arch: x64 }
-          - { sys: windows-11-arm, arch: arm64 }
-    runs-on: ${{ matrix.sys }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup MSYS2
-        id: msys2
-        uses: msys2/setup-msys2@v2
-        with:
-          msystem: MINGW64
-          install: >
-            base-devel
-            git
-            help2man
-            mingw-w64-x86_64-gcc
-            mingw-w64-x86_64-meson
-            mingw-w64-x86_64-ninja
-            mingw-w64-x86_64-cmocka
-            mingw-w64-x86_64-libxml2
-            mingw-w64-x86_64-libusb
-            mingw-w64-x86_64-libzip
-            mingw-w64-x86_64-xz
+          sudo apt-get install -y \
+            autoconf \
+            automake \
+            bison \
+            build-essential \
+            ca-certificates \
+            clang \
+            cmake \
+            curl \
+            file \
+            flex \
+            git \
+            help2man \
+            libtool \
+            libcmocka-dev \
+            libusb-1.0-0-dev \
+            libxml2-dev \
+            libzip-dev \
+            lld \
+            mingw-w64 \
+            ninja-build \
+            patchelf \
+            pipx \
+            pkg-config \
+            python3-pip \
+            tar \
+            unzip \
             zip
 
-      - name: Configure
-        run: meson setup build
-        shell: msys2 {0}
+          pipx ensurepath
+          pipx install meson==1.4.0
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
-      - name: Build
-        run: |
-          git config --global core.autocrlf true
-          meson compile -C build
-        shell: msys2 {0}
+      - name: Cache cross dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            build/ci-vcpkg-windows
+            build/ci-vcpkg-macos
+            ~/.cache/vcpkg
+          key: qdl-cross-vcpkg-${{ runner.os }}-${{ hashFiles('scripts/ci-build-*.sh') }}
+          restore-keys: |
+            qdl-cross-vcpkg-${{ runner.os }}-
 
-      - name: Generate man pages
-        run: meson compile manpages -C build
-        shell: msys2 {0}
+      - name: Build all targets concurrently
+        run: scripts/ci-build-all.sh
 
-      - name: Run tests
-        run: meson test -C build --print-errorlogs
-        shell: msys2 {0}
-
-      - name: Package
-        shell: pwsh
-        run: |
-          $MSYS2_LOCATION = "${{ steps.msys2.outputs.msys2-location }}"
-          $BIN_DIR = Join-Path $MSYS2_LOCATION "mingw64\bin"
-          $DistDir = "dist"
-          New-Item -ItemType Directory -Path $DistDir | Out-Null
-
-          Copy-Item (Join-Path $BIN_DIR "zlib1.dll") $DistDir
-          Copy-Item (Join-Path $BIN_DIR "libxml2-16.dll") $DistDir
-          Copy-Item (Join-Path $BIN_DIR "libusb-1.0.dll") $DistDir
-          Copy-Item (Join-Path $BIN_DIR "libzip.dll") $DistDir
-          Copy-Item (Join-Path $BIN_DIR "liblzma-5.dll") $DistDir
-          Copy-Item (Join-Path $BIN_DIR "libiconv-2.dll") $DistDir
-          Copy-Item (Join-Path $BIN_DIR "libbz2-1.dll") $DistDir
-          Copy-Item (Join-Path $BIN_DIR "libzstd.dll") $DistDir
-
-          Copy-Item "./build/qdl.exe" $DistDir
-
-      - name: Upload artifact
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: qdl-binary-windows-${{ matrix.arch }}
-          path: dist/*
-
+          name: qdl-cross-platform-binaries
+          path: dist/**

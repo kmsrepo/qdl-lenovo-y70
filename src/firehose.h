@@ -20,6 +20,7 @@ enum firehose_op_type {
 	FIREHOSE_OP_SET_BOOTABLE,
 	FIREHOSE_OP_RESET,
 	FIREHOSE_OP_GET_SHA256_DIGEST,
+	FIREHOSE_OP_GET_STORAGE_INFO,
 };
 
 struct firehose_op {

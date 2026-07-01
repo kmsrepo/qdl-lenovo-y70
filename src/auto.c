@@ -33,6 +33,7 @@ static struct qdl_device_auto *to_auto(struct qdl_device *qdl)
 static void auto_bind_inner(struct qdl_device_auto *wrap, struct qdl_device *inner)
 {
 	wrap->inner = inner;
+	wrap->base.dev_type = inner->dev_type;
 	wrap->base.max_payload_size = inner->max_payload_size;
 	if (wrap->chunk_size_set)
 		inner->set_out_chunk_size(inner, wrap->pending_chunk_size);

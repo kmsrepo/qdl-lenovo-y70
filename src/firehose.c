@@ -226,6 +226,39 @@ static int firehose_sha256_parser(xmlNode *node, void *data, bool *rawmode)
 	return ret;
 }
 
+static int firehose_storage_info_parser(xmlNode *node, void *data __unused, bool *rawmode)
+{
+	xmlAttr *attr;
+	xmlChar *value;
+	int ret;
+
+	if (xmlStrcmp(node->name, (xmlChar *)"log") == 0) {
+		value = xmlGetProp(node, (xmlChar *)"value");
+		if (!value)
+			return -EINVAL;
+
+		ux_log("LOG: %s\n", value);
+		xmlFree(value);
+		return -EAGAIN;
+	}
+
+	ret = firehose_generic_parser(node, NULL, rawmode);
+	if (ret != FIREHOSE_ACK)
+		return ret;
+
+	for (attr = node->properties; attr; attr = attr->next) {
+		value = xmlNodeListGetString(node->doc, attr->children, 1);
+		if (!value)
+			continue;
+
+		printf("%s=%s\n", attr->name, value);
+		xmlFree(value);
+	}
+	fflush(stdout);
+
+	return FIREHOSE_ACK;
+}
+
 static int firehose_read(struct qdl_device *qdl, int timeout_ms,
 			 int (*response_parser)(xmlNode *node, void *data, bool *rawmode),
 			 void *data)
@@ -1359,6 +1392,40 @@ out:
 	return ret;
 }
 
+static int firehose_getstorageinfo(struct qdl_device *qdl)
+{
+	xmlNode *root;
+	xmlNode *node;
+	xmlDoc *doc;
+	int ret;
+
+	doc = xmlNewDoc((xmlChar *)"1.0");
+	root = xmlNewNode(NULL, (xmlChar *)"data");
+	xmlDocSetRootElement(doc, root);
+
+	node = xmlNewChild(root, NULL, (xmlChar *)"getstorageinfo", NULL);
+	xml_setpropf(node, "physical_partition_number", "0");
+
+	ret = firehose_write(qdl, doc);
+	if (ret < 0) {
+		ux_err("failed to send getstorageinfo command\n");
+		goto out;
+	}
+
+	ret = firehose_read(qdl, 30000, firehose_storage_info_parser, NULL);
+	if (ret != FIREHOSE_ACK) {
+		ux_err("getstorageinfo failed\n");
+		ret = -1;
+		goto out;
+	}
+
+	ret = 0;
+
+out:
+	xmlFreeDoc(doc);
+	return ret;
+}
+
 static int firehose_apply_patch(struct qdl_device *qdl, struct firehose_op *patch)
 {
 	xmlNode *root;
@@ -1759,6 +1826,11 @@ static int firehose_execute_ops(struct qdl_device *qdl, struct list_head *ops)
 			break;
 		case FIREHOSE_OP_GET_SHA256_DIGEST:
 			ret = firehose_getsha256digest(qdl, op);
+			if (ret < 0)
+				return ret;
+			break;
+		case FIREHOSE_OP_GET_STORAGE_INFO:
+			ret = firehose_getstorageinfo(qdl);
 			if (ret < 0)
 				return ret;
 			break;

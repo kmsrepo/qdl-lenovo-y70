@@ -47,6 +47,7 @@ enum {
 	QDL_CMD_ERASE,
 	QDL_CMD_FLASH,
 	QDL_CMD_SHA256,
+	QDL_CMD_GET_STORAGE_INFO,
 };
 
 bool qdl_debug;
@@ -68,6 +69,8 @@ static int detect_type(const char *verb)
 		return QDL_CMD_FLASH;
 	if (!strcmp(verb, "sha256"))
 		return QDL_CMD_SHA256;
+	if (!strcmp(verb, "getstorageinfo"))
+		return QDL_CMD_GET_STORAGE_INFO;
 
 	if (access(verb, F_OK)) {
 		ux_err("%s is not a verb and not a XML file\n", verb);
@@ -471,6 +474,7 @@ static void print_usage(FILE *out)
 	fprintf(out, "       %s [options] <prog.mbn> ((read | write) <address> <binary>)...\n", __progname);
 	fprintf(out, "       %s [options] <prog.mbn> (erase <address>)...\n", __progname);
 	fprintf(out, "       %s [options] <prog.mbn> (sha256 <address>)...\n", __progname);
+	fprintf(out, "       %s [options] <prog.mbn> getstorageinfo\n", __progname);
 	fprintf(out, "       %s list\n", __progname);
 	fprintf(out, "       %s ramdump [--debug] [-o <ramdump-path>] [<segment-filter>,...]\n", __progname);
 	fprintf(out, "       %s ks -p <sahara-dev-node> -s <id:file-path>...\n", __progname);
@@ -1202,6 +1206,14 @@ static int qdl_flash(int argc, char **argv)
 				errx(1, "failed to add sha256 command");
 			optind += 1;
 			break;
+		case QDL_CMD_GET_STORAGE_INFO: {
+			struct firehose_op *op = firehose_alloc_op(FIREHOSE_OP_GET_STORAGE_INFO);
+
+			if (!op)
+				errx(1, "failed to add getstorageinfo command");
+			list_append(&firehose_ops, &op->node);
+			break;
+		}
 		case QDL_CMD_FLASH:
 			if (optind + 1 >= argc)
 				errx(1, "flash command missing operands");

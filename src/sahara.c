@@ -101,6 +101,7 @@ typedef struct {
 #define DEBUG_BLOCK_SIZE (512u * 1024u)
 
 #define SAHARA_CMD_TIMEOUT_MS	1000
+#define SAHARA_USB_HELLO_TIMEOUTS	5
 
 struct sahara_pkt {
 	uint32_t cmd;
@@ -306,6 +307,7 @@ static int sahara_eoi(struct qdl_device *qdl, struct sahara_pkt *pkt)
 
 	if (pkt->eoi.status != 0) {
 		ux_err("received non-successful end-of-image result\n");
+		sahara_send_reset(qdl);
 		return -1;
 	}
 
@@ -801,6 +803,7 @@ int sahara_run(struct qdl_device *qdl, const struct sahara_image *images,
 	struct sahara_pkt *pkt;
 	char buf[4096];
 	char tmp[32];
+	unsigned int hello_timeouts = 0;
 	bool done = false;
 	int n;
 
@@ -818,6 +821,10 @@ int sahara_run(struct qdl_device *qdl, const struct sahara_image *images,
 		n = qdl_read(qdl, buf, sizeof(buf), SAHARA_CMD_TIMEOUT_MS);
 		if (n < 0) {
 			if (first_read && detect_firehose && n == -ETIMEDOUT) {
+				if (qdl->dev_type == QDL_DEVICE_USB &&
+				    hello_timeouts++ < SAHARA_USB_HELLO_TIMEOUTS)
+					continue;
+
 				/*
 				 * The QUD driver will eat the HELLO request on
 				 * many modern targets, so send an unsolicited

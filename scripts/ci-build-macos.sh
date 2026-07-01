@@ -41,6 +41,27 @@ STRIP="$(find "$OSXCROSS_DIR/bin" -maxdepth 1 \( -type f -o -type l \) -name 'x8
 export PATH="$OSXCROSS_DIR/bin:$PATH"
 export LD_LIBRARY_PATH="$OSXCROSS_DIR/lib:/usr/lib/x86_64-linux-gnu:/usr/lib:${LD_LIBRARY_PATH:-}"
 
+for tool in install_name_tool lipo otool; do
+	target="$(find "$OSXCROSS_DIR/bin" -maxdepth 1 \( -type f -o -type l \) -name "x86_64-apple-darwin*-$tool" | sort -V | tail -n 1)"
+	if [ -n "$target" ]; then
+		ln -sf "$(basename "$target")" "$OSXCROSS_DIR/bin/$tool"
+	fi
+done
+
+for libxml in /usr/lib/x86_64-linux-gnu/libxml2.so.2 /usr/lib/libxml2.so.2; do
+	if [ -e "$libxml" ]; then
+		ln -sf "$libxml" "$OSXCROSS_DIR/lib/libxml2.so.2"
+		break
+	fi
+done
+
+if command -v patchelf >/dev/null 2>&1; then
+	for f in "$OSXCROSS_DIR"/bin/*-ld "$OSXCROSS_DIR"/lib/*.so*; do
+		[ -e "$f" ] || continue
+		patchelf --set-rpath "$OSXCROSS_DIR/lib:/usr/lib/x86_64-linux-gnu:/usr/lib" "$f" 2>/dev/null || true
+	done
+fi
+
 cat >"$CMAKE_TOOLCHAIN" <<EOF
 set(CMAKE_SYSTEM_NAME Darwin)
 set(CMAKE_SYSTEM_PROCESSOR x86_64)
@@ -66,12 +87,17 @@ set(VCPKG_OSX_ARCHITECTURES x86_64)
 set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "$CMAKE_TOOLCHAIN")
 EOF
 
-"$VCPKG_ROOT/vcpkg" install \
-	libusb \
-	libxml2 \
-	libzip \
-	--overlay-triplets "$TRIPLET_DIR" \
-	--triplet "$TRIPLET"
+if ! "$VCPKG_ROOT/vcpkg" install \
+		libusb \
+		libxml2 \
+		libzip \
+		--overlay-triplets "$TRIPLET_DIR" \
+		--triplet "$TRIPLET"; then
+	find "$VCPKG_ROOT/buildtrees" -path '*detect_compiler*' -type f \
+		\( -name '*-out.log' -o -name '*-err.log' \) -print \
+		-exec sed -n '1,180p' {} \; || true
+	exit 1
+fi
 
 cat >"$CROSS_FILE" <<EOF
 [binaries]
